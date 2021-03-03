@@ -1,4 +1,4 @@
-import os
+from os.path import exists as os_file_exists
 from math import log10
 
 import jieba
@@ -52,38 +52,66 @@ def highlight(item, query: str, side_len: int = 12) -> str:
 
 class MySearcher:
     """
-    第十一次课升级的搜索类版本：
     改善文档频和文档长度加权的影响
-    改善IDF权值
     采用BM25打分函数
     """
 
-    def __init__(self):
-        self.docs = list()  # 所有文档原始数据
-        self.load_data()
-        self.cache = dict()
+    def __init__(self, data_file_name='./news_list.pkl'):
+        self.docs = list()  # 所有文档原始数据, [link, title, content, lower_preprocess]
+        self.load_data(data_file_name)
+        self.index = dict()  # 倒排索引
         self.vocab = set()  # 索引词表
-        self.lower_preprocess()
-        jieba.load_userdict('./dict.txt')
+        self.lower_preprocess()  # 为提高召回，额外保存一份全小写的文章标题内容拼接字符串
+        # jieba.load_userdict('./dict.txt')
         self.df = dict()
         self.avg_dl = 0
-        self.build_cache()
+        self.build_index()
 
-    def load_data(self, data_file_name='./news_list.pkl'):
-        if os.path.exists(data_file_name):
+    def load_data(self, data_file_name: str) -> None:
+        if os_file_exists(data_file_name):
             self.docs = Spider.pickle_load(data_file_name)
         else:
             Spider.pickle_save(Spider.spider())
             self.docs = Spider.pickle_load(data_file_name)
 
-    def search(self, query):
+    def lower_preprocess(self):
+        for doc_id in range(len(self.docs)):
+            self.docs[doc_id].append(
+                (self.docs[doc_id][1] + ' ' + self.docs[doc_id][2]).lower())
+
+    def build_index(self):
+        """
+        倒排索引
+        """
+        doc_id = 0
+        doc_length_sum = 0  # 为获取avg_dl
+        for doc in self.docs:
+            doc_word_set = set()  # 文章中所有词的词表
+            doc_length_sum += len(doc[3])
+            for word in jieba.cut_for_search(doc[3]):
+                if word not in doc_word_set:
+                    result_item = doc_id
+                    if word not in self.index:
+                        self.index[word] = {result_item}
+                    else:
+                        self.index[word].add(result_item)
+                    self.vocab.add(word)
+                    doc_word_set.add(word)
+                    if word in self.df:
+                        self.df[word] += 1
+                    else:
+                        self.df[word] = 1
+            doc_id += 1
+        self.avg_dl = doc_length_sum / len(self.docs)
+
+    def search(self, query: str):
         result = None
         for keyword in jieba.cut(query.lower()):
-            if keyword in self.cache:
+            if keyword in self.index:
                 if result is None:
-                    result = self.cache[keyword]
+                    result = self.index[keyword]
                 else:
-                    result = result & self.cache[keyword]
+                    result = result & self.index[keyword]
             else:
                 result = set()
                 break
@@ -92,14 +120,14 @@ class MySearcher:
         sorted_result = self.rank(query, result)
         return sorted_result
 
-    def rank(self, query, result_set):
+    def rank(self, query: str, result_set):
         result = list()
         for doc_id in result_set:
             result.append([doc_id, self.score(self.docs[doc_id], query)])
         result.sort(key=lambda x: x[1], reverse=True)
         return result
 
-    def render_search_result(self, query):
+    def render_search_result(self, query: str) -> str:
         """
         返回带有高亮和摘要的查询结果
         """
@@ -110,7 +138,15 @@ class MySearcher:
             result += f'{count}[{item[1]}] {highlight(self.docs[item[0]], query)}\n'
         return result
 
-    def score(self, item, query, k1=2, b=0.75):
+    def score(self, item, query, k1=2, b=0.75) -> int:
+        """
+        采用BM25打分函数
+        :param item:
+        :param query:
+        :param k1:
+        :param b: 调节文本长度对相关性的影响
+        :return:
+        """
         score = 0
         for keyword in jieba.cut(query.lower()):
             f = item[2].lower().count(keyword.lower())
@@ -119,33 +155,3 @@ class MySearcher:
             idf = log10((len(self.docs) - self.df[keyword] + 0.5) / (self.df[keyword] + 0.5))
             score += tf * idf
         return score
-
-    def build_cache(self):
-        """
-        用分词（用文档过滤词库）的方式构建索引
-        """
-        doc_id = 0
-        doc_length_sum = 0
-        for doc in self.docs:
-            doc_word_set = set()
-            doc_length_sum += len(doc[3])
-            for word in jieba.cut_for_search(doc[3]):
-                if word not in doc_word_set:
-                    result_item = doc_id
-                    if word not in self.cache:
-                        self.cache[word] = {result_item}
-                    else:
-                        self.cache[word].add(result_item)
-                    self.vocab.add(word)
-                    doc_word_set.add(word)
-                    if word in self.df:
-                        self.df[word] += 1
-                    else:
-                        self.df[word] = 1
-            doc_id += 1
-        self.avg_dl = doc_length_sum / len(self.docs)
-
-    def lower_preprocess(self):
-        for doc_id in range(len(self.docs)):
-            self.docs[doc_id].append(
-                (self.docs[doc_id][1] + ' ' + self.docs[doc_id][2]).lower())
