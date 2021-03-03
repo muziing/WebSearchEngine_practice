@@ -47,7 +47,7 @@ def highlight(item, query: str, side_len: int = 12) -> str:
         end_ellipsis = '...' if end_pos < len_content_lower else ''
         segments.append(start_ellipsis + item[2][word_start_map[start_pos]: word_end_map[end_pos]] + end_ellipsis)
         i += 1
-    result = text = item[1] + '\n' + ''.join(segments)
+    result = text = f'<a href="{item[0]}"{item[1]}</a>' + '</br>' + ''.join(segments)  # TODO 修复a标签导致标题全部高亮的问题
     text_lower = text.lower()
     for keyword in query_words:
         # 高亮部分
@@ -141,16 +141,14 @@ class MySearcher:
         result.sort(key=lambda x: x[1], reverse=True)
         return result
 
-    def render_search_result(self, query: str) -> str:
+    def render_search_result(self, query: str) -> tuple:
         """
         返回带有高亮和摘要的查询结果
         """
-        count = 0
-        result = ''
+        result = list()
         for item in self.search(query):
-            count += 1
-            result += f'{count}[{item[1]}] {highlight(self.docs[item[0]], query)}\n'
-        return result
+            result.append((item[1], highlight(self.docs[item[0]], query)))
+        return tuple(result)
 
     def score(self, item, query, k1=2, b=0.75) -> int:
         """
@@ -170,3 +168,8 @@ class MySearcher:
             idf = log10((len(self.docs) - self.df[keyword] + 0.5) / (self.df[keyword] + 0.5))
             score += tf * idf
         return score
+
+
+if __name__ == '__main__':
+    my_searcher = MySearcher()
+    print(my_searcher.render_search_result("华为手机")[0])
