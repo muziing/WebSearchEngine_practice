@@ -7,6 +7,14 @@ import Spider
 
 
 def highlight(item, query: str, side_len: int = 12) -> str:
+    """
+    返回带有HTML高亮的标题及摘要文本
+
+    :param item:
+    :param query: 查询内容
+    :param side_len: 摘要中关键字两侧字符串长度
+    :return:
+    """
     positions = list()
     query_words = list(jieba.cut(query))  # 把生成器强制转换为列表
     i = 0
@@ -105,6 +113,12 @@ class MySearcher:
         self.avg_dl = doc_length_sum / len(self.docs)
 
     def search(self, query: str):
+        """
+        搜索方法
+
+        :param query: 查询内容
+        :return: 返回排序后的查询结果[doc_id, score, query]
+        """
         result = None
         for keyword in jieba.cut(query.lower()):
             if keyword in self.index:
@@ -141,11 +155,12 @@ class MySearcher:
     def score(self, item, query, k1=2, b=0.75) -> int:
         """
         采用BM25打分函数
-        :param item:
-        :param query:
-        :param k1:
-        :param b: 调节文本长度对相关性的影响
-        :return:
+
+        :param item: 单篇文档
+        :param query: 查询内容
+        :param k1: BM25参数
+        :param b: BM25参数，调节文本长度对相关性的影响
+        :return: 返回得分
         """
         score = 0
         for keyword in jieba.cut(query.lower()):
